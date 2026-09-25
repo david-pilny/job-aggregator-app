@@ -1,64 +1,72 @@
-# Nuxt Dashboard Template
+# Job aggregator UI
 
-[![Nuxt UI](https://img.shields.io/badge/Made%20with-Nuxt%20UI-00DC82?logo=nuxt&labelColor=020420)](https://ui.nuxt.com)
+Local, single-user web UI over the Python pipeline's SQLite database. Browse and filter
+scored job matches, track your own progress per job (saved, applied, interviewing, offer,
+rejected, notes), inspect source health, and start a pipeline run from the browser.
 
-Get started with the Nuxt dashboard template with multiple pages, collapsible sidebar, keyboard shortcuts, light & dark mode, command palette and more, powered by [Nuxt UI](https://ui.nuxt.com).
-
-- [Live demo](https://dashboard-template.nuxt.dev/)
-- [Documentation](https://ui.nuxt.com/docs/getting-started/installation/nuxt)
-
-<a href="https://dashboard-template.nuxt.dev/" target="_blank">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://ui.nuxt.com/assets/templates/nuxt/dashboard-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="https://ui.nuxt.com/assets/templates/nuxt/dashboard-light.png">
-    <img alt="Nuxt Dashboard Template" src="https://ui.nuxt.com/assets/templates/nuxt/dashboard-light.png">
-  </picture>
-</a>
-
-> The dashboard template for Vue is on https://github.com/nuxt-ui-templates/dashboard-vue.
-
-## Quick Start
-
-```bash [Terminal]
-npm create nuxt@latest -- -t ui/dashboard
-```
-
-## Deploy your own
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-name=dashboard&repository-url=https%3A%2F%2Fgithub.com%2Fnuxt-ui-templates%2Fdashboard&demo-image=https%3A%2F%2Fui.nuxt.com%2Fassets%2Ftemplates%2Fnuxt%2Fdashboard-dark.png&demo-url=https%3A%2F%2Fdashboard-template.nuxt.dev%2F&demo-title=Nuxt%20Dashboard%20Template&demo-description=A%20dashboard%20template%20with%20multi-column%20layout%20for%20building%20sophisticated%20admin%20interfaces.)
+Stack: Nuxt 4, Nuxt UI v4 (Tailwind CSS v4), TypeScript strict, `better-sqlite3` in Nuxt
+server routes, `zod` for route input. No auth, no deployment target: it runs on your machine.
 
 ## Setup
 
-Make sure to install the dependencies:
-
 ```bash
-pnpm install
+cd ui
+pnpm install          # better-sqlite3 uses its prebuilt binary; no C++ toolchain needed
+cp .env.example .env  # optional, defaults assume ../jobs.sqlite and ../config.yaml
+pnpm dev              # http://localhost:3000
 ```
 
-## Development Server
+The pipeline must have run at least once so that `jobs.sqlite` exists. The UI creates its own
+`job_state` table on first start and never writes to the pipeline's tables.
 
-Start the development server on `http://localhost:3000`:
+## Environment variables
 
-```bash
-pnpm dev
+All optional; defaults are relative to the `ui/` folder.
+
+| Variable                | Default            | Purpose                                              |
+| ----------------------- | ------------------ | ---------------------------------------------------- |
+| `NUXT_DB_PATH`          | `../jobs.sqlite`   | The pipeline's SQLite file                            |
+| `NUXT_PIPELINE_CWD`     | `..`               | Working directory for "Run now" (where config.yaml lives) |
+| `NUXT_PIPELINE_COMMAND` | `uv run jobs run`  | Command spawned by "Run now" (`--dry-run` is appended when ticked) |
+
+## Running alongside the pipeline
+
+The database is opened in WAL mode with a 5 s busy timeout, so the daily `jobs run` (cron,
+Task Scheduler, or the "Run now" button) and the UI can use the file at the same time. When a
+run finishes, reload the jobs page to see new matches; the runs page refreshes itself.
+
+`job_state` is the only UI-owned table. Deleting it resets all statuses and notes; the
+pipeline's data is unaffected.
+
+## Pages
+
+- **Jobs** (`/`): server-side filtered, sorted and paginated table. Every filter lives in the
+  URL, so links are shareable. Row click opens the detail panel; `j`/`k` move a highlight,
+  `Enter` opens it, `s` saves, `x` marks not interested, `o` opens the listing, `Esc` clears.
+  Checkbox selection enables bulk "Mark seen" / "Not interested".
+- **Tracker** (`/tracker`): kanban of saved → applied → interviewing → offer / rejected. Drag
+  a card or use its "Move to" menu.
+- **Sources & runs** (`/runs`): recent runs with a per-source result matrix. Solid orange =
+  a source returned 0 although it usually returns results; solid red = adapter error. "Run
+  now" starts one pipeline run at a time and shows its log.
+- **Settings** (`/settings`): read-only `config.yaml` with a YAML validity check.
+
+Global shortcuts: `g` then `j` / `t` / `r` / `s` jump between pages.
+
+## Layout
+
+```
+shared/        types and the jobs query schema, used by server and client
+server/utils   db handle + job_state migration, zod helpers, pipeline runner
+server/repositories   all SQL
+server/api     thin routes
+app/composables useJobs, useJobState, useTracker, useRuns
+app/pages      one file per page; app/components/job/* are shared pieces
 ```
 
-## Production
-
-Build the application for production:
+## Checks
 
 ```bash
-pnpm build
+pnpm lint
+pnpm typecheck
 ```
-
-Locally preview production build:
-
-```bash
-pnpm preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
-
-## Renovate integration
-
-Install [Renovate GitHub app](https://github.com/apps/renovate/installations/select_target) on your repository and you are good to go.

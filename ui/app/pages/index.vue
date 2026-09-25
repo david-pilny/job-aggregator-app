@@ -6,6 +6,7 @@ import { JOB_STATUSES, REMOTE_TYPES, type JobListItem, type JobStatus } from '#s
 import type { JobSort } from '#shared/utils/jobs-query'
 
 useDashboard()
+useSeoMeta({ title: 'Jobs' })
 
 const UButton = resolveComponent('UButton')
 const UCheckbox = resolveComponent('UCheckbox')
@@ -86,6 +87,38 @@ function onRowSelect(_event: Event, row: Row<JobListItem>) {
   openDetail(row.original)
 }
 
+// --- keyboard navigation ----------------------------------------------------------
+// A highlighted row (independent of checkbox selection) that j/k move through;
+// s / x / o / Enter act on it. Shortcuts are ignored while typing in inputs.
+
+const activeIndex = ref(-1)
+watch(() => data.value.items, () => activeIndex.value = -1)
+
+const activeJob = computed(() => data.value.items[activeIndex.value] ?? null)
+
+function moveActive(delta: number) {
+  const count = data.value.items.length
+  if (!count) return
+  activeIndex.value = Math.min(count - 1, Math.max(0, activeIndex.value + delta))
+  document.querySelector(`[data-job-row="${activeJob.value?.id}"]`)?.scrollIntoView({ block: 'nearest' })
+}
+
+defineShortcuts({
+  j: () => moveActive(1),
+  k: () => moveActive(-1),
+  enter: () => activeJob.value && openDetail(activeJob.value),
+  s: () => activeJob.value && toggleSaved(activeJob.value),
+  x: () => activeJob.value && dismiss(activeJob.value),
+  o: () => {
+    const url = activeJob.value?.sources[0]?.url
+    if (url) window.open(url, '_blank', 'noopener')
+  },
+  escape: () => {
+    activeIndex.value = -1
+    rowSelection.value = {}
+  }
+})
+
 // --- selection + actions --------------------------------------------------------
 
 const rowSelection = ref<Record<string, boolean>>({})
@@ -129,7 +162,7 @@ const columns: TableColumn<JobListItem>[] = [
     id: 'score',
     accessorKey: 'score',
     header: sortableHeader('Score'),
-    cell: ({ row }) => h(JobScoreBadge, { score: row.original.score })
+    cell: ({ row }) => h('span', { 'data-job-row': row.original.id }, h(JobScoreBadge, { score: row.original.score }))
   },
   {
     accessorKey: 'title',
@@ -232,6 +265,12 @@ const columns: TableColumn<JobListItem>[] = [
     ])
   }
 ]
+
+function rowClass(row: { original: JobListItem }): string {
+  const dimmed = row.original.status === 'not_interested' || row.original.status === 'rejected'
+  const active = row.original.id === activeJob.value?.id
+  return [dimmed ? 'opacity-50' : '', active ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''].join(' ')
+}
 
 const rangeLabel = computed(() => {
   const { total, page, pageSize } = data.value
@@ -372,7 +411,7 @@ const rangeLabel = computed(() => {
         :loading="status === 'pending'"
         sticky
         class="shrink-0"
-        :meta="{ class: { tr: (row: { original: JobListItem }) => row.original.status === 'not_interested' || row.original.status === 'rejected' ? 'opacity-50' : '' } }"
+        :meta="{ class: { tr: rowClass } }"
         :ui="{
           base: 'table-fixed border-separate border-spacing-0',
           thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
@@ -403,9 +442,12 @@ const rangeLabel = computed(() => {
       </UTable>
 
       <div class="mt-auto flex items-center justify-between gap-3 border-t border-default pt-4">
-        <div class="text-xs text-muted">
-          <span v-if="selectedJobs.length">{{ selectedJobs.length }} selected · </span>
+        <div class="flex items-center gap-2 text-xs text-muted">
+          <span v-if="selectedJobs.length">{{ selectedJobs.length }} selected ·</span>
           <span>* date from first sighting, the board gives none</span>
+          <span class="hidden items-center gap-1 lg:inline-flex">
+            · <UKbd>j</UKbd><UKbd>k</UKbd> move <UKbd>↵</UKbd> open <UKbd>s</UKbd> save <UKbd>x</UKbd> dismiss <UKbd>o</UKbd> listing
+          </span>
         </div>
         <div class="flex items-center gap-3">
           <USelect
