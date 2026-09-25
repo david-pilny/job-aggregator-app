@@ -37,15 +37,41 @@ sources:
     delay_seconds: [3, 6]          # pause between site calls
     extra_searches:                # in addition to search.terms x search.locations
       - { term: "Vue.js developer", location: "European Union", remote: true, sites: [linkedin] }
-  jobs_cz:        { enabled: false }
-  prace_cz:       { enabled: false }
-  startupjobs:    { enabled: false }
-  cocuma:         { enabled: false }
-  jobstack:       { enabled: false }
-  wttj:           { enabled: false }
-  remotive:       { enabled: false }
-  arbeitnow:      { enabled: false }
-  weworkremotely: { enabled: false }
+  # Czech boards. Each adapter documents its method at the top of its file.
+  jobs_cz:
+    enabled: true
+    pages: 1                       # result pages per query (~20-30 cards each)
+  prace_cz:
+    enabled: true
+  jobstack:
+    enabled: true
+    categories: [vue-js-developer, javascript-developer, react-developer, node-js-developer,
+                 full-stack-developer, web-koder]
+    locations: [""]                # "" = whole country; also "praha", "brno", "remote"
+  cocuma:
+    enabled: true
+    pages: 15                      # stops early when a page has no cards
+    max_details: 30                # detail pages fetched per run (new listings only)
+  startupjobs:
+    enabled: true
+    max_details: 30
+  wttj:
+    enabled: true                  # downloads ~10 gzipped sitemaps (~25 MB) per run
+    slug_cities: [prague, praha, brno, ostrava, czech]
+    max_details: 20
+  # Remote boards with public APIs/feeds.
+  remotive:
+    enabled: true
+    category: software-dev
+    limit: 50
+    allowed_locations: [worldwide, europe, emea, czech, eu, anywhere]
+  arbeitnow:
+    enabled: true
+    pages: 1
+  weworkremotely:
+    enabled: true
+    feeds: [remote-front-end-programming-jobs, remote-full-stack-programming-jobs]
+    allowed_regions: [anywhere, europe, emea, worldwide]
 
 filters:
   max_age_days: 14

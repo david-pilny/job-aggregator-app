@@ -127,18 +127,19 @@ def sources(ctx: click.Context, include_disabled: bool, sources: tuple[str, ...]
     from jobagg.sources import build_sources
 
     app: AppConfig = ctx.obj["app"]
-    queries = build_queries(app)[:1]
+    queries = build_queries(app)
     adapters = build_sources(app, only=list(sources) or None, include_disabled=include_disabled)
     if not adapters:
         click.echo("no adapters enabled")
         return
-    click.echo(f"Smoke query: {queries[0].label()}")
+    click.echo("Running the first query of each adapter (detail pages are not skipped).")
     for adapter in adapters:
-        result = adapter.run(queries, extend=False)
+        result = adapter.run(queries, limit=1)
         counts = result.count_by_source(adapter.produces)
         status = "ERROR" if result.errors else "ok"
-        click.echo(f"{adapter.name:<14} {status:<5} {len(result.jobs):>4} results in "
-                   f"{result.duration_s:5.1f}s  " +
+        label = next(iter(result.per_query), "-")
+        click.echo(f"{adapter.name:<14} {status:<5} {len(result.jobs):>4} results, "
+                   f"{result.requests:>3} requests in {result.duration_s:5.1f}s  [{label}]  " +
                    ", ".join(f"{k}={v}" for k, v in counts.items()))
         for err in result.errors:
             click.echo(f"    {err}")

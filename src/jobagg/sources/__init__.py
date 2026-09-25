@@ -3,11 +3,24 @@
 from __future__ import annotations
 
 from jobagg.config import AppConfig
+from jobagg.sources.arbeitnow import ArbeitnowSource
 from jobagg.sources.base import Source, SourceResult
+from jobagg.sources.cocuma import CocumaSource
+from jobagg.sources.jobs_cz import JobsCzSource
 from jobagg.sources.jobspy_source import JobSpySource
+from jobagg.sources.jobstack import JobstackSource
+from jobagg.sources.prace_cz import PraceCzSource
+from jobagg.sources.remotive import RemotiveSource
+from jobagg.sources.startupjobs import StartupjobsSource
+from jobagg.sources.weworkremotely import WwrSource
+from jobagg.sources.wttj import WttjSource
 
 REGISTRY: dict[str, type[Source]] = {
-    JobSpySource.name: JobSpySource,
+    cls.name: cls
+    for cls in (
+        JobSpySource, JobsCzSource, PraceCzSource, JobstackSource, CocumaSource,
+        StartupjobsSource, WttjSource, RemotiveSource, ArbeitnowSource, WwrSource,
+    )
 }
 
 

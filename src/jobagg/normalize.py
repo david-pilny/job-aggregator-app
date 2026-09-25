@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Iterable, Mapping
+from datetime import date, timedelta
 
 # Legal-form suffixes to strip from company names. Dotted Czech forms are matched
 # with their dots so ordinary words like "as" are left alone.
@@ -167,6 +168,106 @@ def infer_remote_type(
     if _ONSITE_RE.search(head) or _ONSITE_RE.search(body):
         return "onsite"
     return "unknown"
+
+
+# --- Czech dates and salaries ------------------------------------------------
+
+_CZ_MONTHS = {
+    "leden": 1, "ledna": 1, "unor": 2, "unora": 2, "brezen": 3, "brezna": 3, "duben": 4,
+    "dubna": 4, "kveten": 5, "kvetna": 5, "cerven": 6, "cervna": 6, "cervenec": 7,
+    "cervence": 7, "srpen": 8, "srpna": 8, "zari": 9, "rijen": 10, "rijna": 10,
+    "listopad": 11, "listopadu": 11, "prosinec": 12, "prosince": 12,
+}
+
+
+def parse_cz_date(text: str | None, today: date | None = None) -> date | None:
+    """Parse Czech relative/absolute dates: 'dnes', 'včera', 'před 3 dny',
+    '9. září', '05. 08. 2026', '2026-09-05'. Returns None when unsure."""
+    if not text:
+        return None
+    today = today or date.today()
+    t = strip_accents(text).lower()
+    if re.search(r"\b(dnes|nova nabidka|new)\b", t):
+        return today
+    if "vcera" in t or "yesterday" in t:
+        return today - timedelta(days=1)
+    m = re.search(r"pred\s+(\d+)\s+(dny|dnem|tydn\w*|hod\w*)", t)
+    if m:
+        n = int(m.group(1))
+        unit = m.group(2)
+        if unit.startswith("hod"):
+            return today
+        return today - timedelta(days=n * (7 if unit.startswith("tydn") else 1))
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", t)
+    if m:
+        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    m = re.search(r"(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})", t)
+    if m:
+        return date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+    m = re.search(r"(\d{1,2})\.\s*([a-z]+)(?:\s+(\d{4}))?", t)
+    if m and m.group(2) in _CZ_MONTHS:
+        year = int(m.group(3)) if m.group(3) else today.year
+        try:
+            d = date(year, _CZ_MONTHS[m.group(2)], int(m.group(1)))
+        except ValueError:
+            return None
+        if not m.group(3) and d > today + timedelta(days=7):
+            d = d.replace(year=year - 1)
+        return d
+    return None
+
+
+_SALARY_NUM_RE = re.compile(r"(\d{1,3}(?:[   .]\d{3})+|\d+(?:[.,]\d+)?)\s*(tis\.?|k\b)?", re.I)
+_ZW_RE = re.compile(r"[​‌‍⁠﻿]")
+
+
+def parse_salary_cz(text: str | None) -> tuple[float | None, float | None, str, str] | None:
+    """Parse salary strings like '70 000 – 90 000 Kč', 'až 55 000 Kč / měsíc',
+    'od 60 000 Kč', '0 Kč – 130 tis. Kč', '2 500 EUR'. Returns
+    (min, max, currency, period) or None when no currency/number is found."""
+    if not text:
+        return None
+    t = _ZW_RE.sub("", text).replace(" ", " ")
+    low = strip_accents(t).lower()
+    if "kc" in low or "czk" in low:
+        currency = "CZK"
+    elif "eur" in low or "€" in t:
+        currency = "EUR"
+    elif "usd" in low or "$" in t:
+        currency = "USD"
+    else:
+        return None
+    if re.search(r"hod|hour|/\s*h\b", low):
+        period = "hour"
+    elif re.search(r"rok|year|annum|p\.a\.", low):
+        period = "year"
+    elif re.search(r"den|day", low):
+        period = "day"
+    else:
+        period = "month"
+    values: list[float] = []
+    for num, thousands in _SALARY_NUM_RE.findall(t):
+        cleaned = re.sub(r"[   ]", "", num)
+        if "." in cleaned and len(cleaned.split(".")[-1]) == 3:
+            cleaned = cleaned.replace(".", "")
+        try:
+            value = float(cleaned.replace(",", "."))
+        except ValueError:
+            continue
+        if thousands:
+            value *= 1000
+        values.append(value)
+    if not values or not any(v > 0 for v in values):
+        return None
+    if len(values) >= 2:
+        lo, hi = min(values[:2]), max(values[:2])
+        return (lo or None), (hi or None), currency, period  # "0 Kč – 130 tis." => up to
+    single = values[0]
+    if re.search(r"\b(od|from|min)\b", low):
+        return single, None, currency, period
+    if re.search(r"\b(az|do|up to|max)\b", low):
+        return None, single, currency, period
+    return single, single, currency, period
 
 
 # --- tech tags ---------------------------------------------------------------

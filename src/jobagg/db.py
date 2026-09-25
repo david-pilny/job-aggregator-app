@@ -198,6 +198,32 @@ class Database:
         ).fetchall()
         return [self._row_to_job(r) for r in rows]
 
+    def known_source_urls(self) -> set[str]:
+        return {r["url"] for r in self.conn.execute("SELECT url FROM job_sources")}
+
+    def touch_urls(self, urls: Iterable[str], now: datetime | None = None) -> int:
+        """Mark listings seen again without re-fetching them (keeps jobs active)."""
+        urls = list(urls)
+        if not urls:
+            return 0
+        stamp = (now or utcnow()).isoformat()
+        touched = 0
+        with self.conn:
+            for i in range(0, len(urls), 500):
+                chunk = urls[i:i + 500]
+                marks = ",".join("?" * len(chunk))
+                self.conn.execute(
+                    f"UPDATE job_sources SET last_seen_at = ? WHERE url IN ({marks})",
+                    [stamp, *chunk],
+                )
+                cur = self.conn.execute(
+                    f"UPDATE jobs SET last_seen_at = ? WHERE id IN "
+                    f"(SELECT job_id FROM job_sources WHERE url IN ({marks}))",
+                    [stamp, *chunk],
+                )
+                touched += cur.rowcount
+        return touched
+
     def job_count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
 

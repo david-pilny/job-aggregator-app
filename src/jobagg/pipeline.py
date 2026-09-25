@@ -58,17 +58,22 @@ def build_queries(app: AppConfig) -> list[SearchQuery]:
 
 
 def scrape_all(
-    app: AppConfig, only: list[str] | None = None
-) -> tuple[list[Job], list[SourceStat], list[str]]:
-    """Run every enabled adapter in isolation; never raises because of one source."""
+    app: AppConfig, only: list[str] | None = None,
+    known_urls: frozenset[str] | set[str] = frozenset(),
+) -> tuple[list[Job], list[SourceStat], list[str], list[str]]:
+    """Run every enabled adapter in isolation; never raises because of one source.
+
+    Returns (jobs, per-source stats, error messages, URLs seen again but not re-fetched).
+    """
     jobs: list[Job] = []
     stats: list[SourceStat] = []
     errors: list[str] = []
+    seen_urls: list[str] = []
     queries = build_queries(app)
     for source in build_sources(app, only=only):
         log.info("=== %s: %d queries", source.name, len(source.queries(queries)))
         try:
-            result = source.run(queries)
+            result = source.run(queries, known_urls=known_urls)
         except Exception as exc:  # noqa: BLE001 - belt and braces around Source.run
             msg = f"{source.name}: crashed: {type(exc).__name__}: {exc}"
             log.exception(msg)
@@ -83,10 +88,12 @@ def scrape_all(
             stats.append(
                 SourceStat(source.name, name, n, result.duration_s, error=per_source_error)
             )
-        log.info("=== %s: %d listings in %.1fs%s", source.name, len(result.jobs),
+        log.info("=== %s: %d listings, %d known skipped, %d requests in %.1fs%s",
+                 source.name, len(result.jobs), len(result.seen_urls), result.requests,
                  result.duration_s, f", {len(result.errors)} error(s)" if result.errors else "")
         jobs.extend(result.jobs)
-    return jobs, stats, errors
+        seen_urls.extend(result.seen_urls)
+    return jobs, stats, errors, seen_urls
 
 
 def check_health(db: Database, stats: list[SourceStat], run_id: int) -> None:
@@ -107,7 +114,7 @@ def run_pipeline(app: AppConfig, db: Database, *, dry_run: bool = False,
     run_id = db.start_run(dry_run=dry_run)
     summary = RunSummary(run_id=run_id, dry_run=dry_run)
 
-    raw, stats, errors = scrape_all(app, only=only)
+    raw, stats, errors, seen_urls = scrape_all(app, only=only, known_urls=db.known_source_urls())
     summary.fetched = len(raw)
     summary.stats = stats
     summary.errors = errors
@@ -124,6 +131,8 @@ def run_pipeline(app: AppConfig, db: Database, *, dry_run: bool = False,
     log.info("%d listings -> %d after filters -> %d unique", len(raw), len(kept), len(unique))
 
     result = db.upsert_jobs(unique)
+    if seen_urls:
+        db.touch_urls(seen_urls)
     new_ids = set(result.new_ids)
     log.info("stored: %d new, %d already known (db total %d)",
              len(result.new_ids), len(result.updated_ids), db.job_count())

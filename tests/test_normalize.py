@@ -77,3 +77,35 @@ def test_extract_tech_tags_uses_word_boundaries():
 def test_markdown_to_text():
     md = "**Role**\n\n- Build [our app](https://x.y) with `Vue`\n\n\n\n### Stack"
     assert markdown_to_text(md) == "Role\n\n- Build our app with Vue\n\nStack"
+
+
+def test_parse_cz_date():
+    from datetime import date, timedelta
+
+    from jobagg.normalize import parse_cz_date
+
+    today = date(2026, 9, 25)
+    assert parse_cz_date("Přidáno dnes", today) == today
+    assert parse_cz_date("Přidáno včera", today) == today - timedelta(days=1)
+    assert parse_cz_date("před 3 dny", today) == date(2026, 9, 22)
+    assert parse_cz_date("před 2 týdny", today) == date(2026, 9, 11)
+    assert parse_cz_date("9. září", today) == date(2026, 9, 9)
+    assert parse_cz_date("28. prosince", today) == date(2025, 12, 28)  # future -> last year
+    assert parse_cz_date("05. 08. 2026", today) == date(2026, 8, 5)
+    assert parse_cz_date("2026-09-05T10:00", today) == date(2026, 9, 5)
+    assert parse_cz_date("Končí zítra", today) is None
+    assert parse_cz_date(None) is None
+
+
+def test_parse_salary_cz():
+    from jobagg.normalize import parse_salary_cz
+
+    assert parse_salary_cz("70 000 \u200d–\u200d 90 000 Kč") == (70000, 90000, "CZK", "month")
+    assert parse_salary_cz("až 55 000 Kč / měsíc") == (None, 55000, "CZK", "month")
+    assert parse_salary_cz("od 60 000 Kč") == (60000, None, "CZK", "month")
+    assert parse_salary_cz("0 Kč – 130 tis. Kč") == (None, 130000, "CZK", "month")
+    assert parse_salary_cz("2 500 – 3 000 EUR") == (2500, 3000, "EUR", "month")
+    assert parse_salary_cz("450 Kč/hod") == (450, 450, "CZK", "hour")
+    assert parse_salary_cz("$120k - $150k per year") == (120000, 150000, "USD", "year")
+    assert parse_salary_cz("Odpověď do 2 týdnů") is None
+    assert parse_salary_cz("") is None

@@ -30,6 +30,9 @@ class SourceResult:
     errors: list[str] = field(default_factory=list)
     duration_s: float = 0.0
     per_query: dict[str, int] = field(default_factory=dict)
+    #: Source URLs the adapter saw again but did not re-fetch (already stored).
+    seen_urls: list[str] = field(default_factory=list)
+    requests: int = 0
 
     def count_by_source(self, produces: Sequence[str]) -> dict[str, int]:
         counts = {name: 0 for name in produces}
@@ -77,6 +80,12 @@ class Source(ABC):
             settings.get("delay_seconds", app.http.delay_seconds)
         )
         self._tag_patterns = compile_tag_patterns(app.tech_tags)
+        #: Source URLs already stored in the DB; adapters that fetch detail pages
+        #: skip these and call ``mark_seen`` instead so the job stays "active".
+        self.known_urls: frozenset[str] = frozenset()
+        self._seen_known: list[str] = []
+        self._client: httpx.Client | None = None
+        self._requests = 0
 
     @abstractmethod
     def fetch(self, query: SearchQuery) -> list[Job]:
@@ -89,12 +98,44 @@ class Source(ABC):
     def tag(self, *texts: str | None) -> list[str]:
         return extract_tech_tags(" ".join(t for t in texts if t), self._tag_patterns)
 
-    def run(self, base_queries: list[SearchQuery], *, extend: bool = True) -> SourceResult:
-        """Fetch all queries; ``extend=False`` skips adapter-specific extra searches."""
+    # --- HTTP helpers ---------------------------------------------------------
+
+    @property
+    def http(self) -> httpx.Client:
+        if self._client is None:
+            self._client = make_http_client(self.app)
+        return self._client
+
+    def get(self, url: str, **kwargs: Any) -> httpx.Response:
+        """GET with the shared client, a polite randomized pause before every
+        request after the first, and ``raise_for_status``."""
+        if self._requests > 0:
+            polite_sleep(self.delay_range)
+        self._requests += 1
+        response = self.http.get(url, **kwargs)
+        response.raise_for_status()
+        return response
+
+    def is_known(self, url: str) -> bool:
+        return url in self.known_urls
+
+    def mark_seen(self, url: str) -> None:
+        self._seen_known.append(url)
+
+    def run(self, base_queries: list[SearchQuery], *, extend: bool = True,
+            known_urls: frozenset[str] | set[str] = frozenset(),
+            limit: int | None = None) -> SourceResult:
+        """Fetch all queries. ``extend=False`` skips adapter-specific extra searches;
+        ``limit`` runs only the first N derived queries (smoke tests)."""
         result = SourceResult(adapter=self.name)
         started = time.perf_counter()
         seen: set[tuple[str, str]] = set()
+        self.known_urls = frozenset(known_urls)
+        self._seen_known = []
+        self._requests = 0
         queries = self.queries(base_queries) if extend else list(base_queries)
+        if limit is not None:
+            queries = queries[:limit]
         for i, query in enumerate(queries):
             if i > 0:
                 polite_sleep(self.delay_range)
@@ -116,5 +157,10 @@ class Source(ABC):
             result.per_query[query.label()] = len(jobs)
             log.info("%s: %s -> %d listings (%d new within adapter)",
                      self.name, query.label(), len(jobs), fresh)
+        result.seen_urls = sorted(set(self._seen_known))
+        result.requests = self._requests
         result.duration_s = time.perf_counter() - started
+        if self._client is not None:
+            self._client.close()
+            self._client = None
         return result
