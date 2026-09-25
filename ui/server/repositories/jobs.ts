@@ -133,6 +133,17 @@ export function listJobs(query: JobsQuery): JobsPage {
   return { items: rows.map(toListItem), total: total.n, page: query.page, pageSize: query.pageSize }
 }
 
+/** Jobs the user has acted on, for the tracker; most recently updated first. */
+export function listByStatuses(statuses: JobStatus[]): JobListItem[] {
+  if (!statuses.length) return []
+  const rows = useDb()
+    .prepare(`SELECT ${LIST_COLUMNS} FROM jobs j JOIN job_state st ON st.job_id = j.id
+      WHERE st.status IN (${placeholders(statuses.length)})
+      ORDER BY st.updated_at DESC`)
+    .all(...statuses) as JobRow[]
+  return rows.map(toListItem)
+}
+
 export function getJob(id: string): JobDetail | null {
   const row = useDb()
     .prepare(`SELECT ${LIST_COLUMNS}, j.description, j.score_breakdown, j.source, j.source_url,
