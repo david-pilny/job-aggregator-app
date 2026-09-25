@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { SortingState } from '@tanstack/table-core'
+import type { Row, SortingState } from '@tanstack/table-core'
 import { useDebounceFn } from '@vueuse/core'
 import { JOB_STATUSES, REMOTE_TYPES, type JobListItem, type JobStatus } from '#shared/types/job'
 import type { JobSort } from '#shared/utils/jobs-query'
@@ -68,6 +68,22 @@ function sortableHeader(label: string) {
       onClick: () => column.toggleSorting(sorted !== 'desc')
     })
   }
+}
+
+// --- detail slideover ------------------------------------------------------------
+
+const selected = ref<JobListItem | null>(null)
+const detailOpen = ref(false)
+
+function openDetail(job: JobListItem) {
+  selected.value = job
+  detailOpen.value = true
+  // Opening a fresh listing is the natural "I have looked at this" signal.
+  if (job.status === 'new') patch(job, { status: 'seen' }, { silent: true })
+}
+
+function onRowSelect(_event: Event, row: Row<JobListItem>) {
+  openDetail(row.original)
 }
 
 // --- selection + actions --------------------------------------------------------
@@ -344,6 +360,8 @@ const rangeLabel = computed(() => {
     </template>
 
     <template #body>
+      <JobDetailSlideover v-model:open="detailOpen" :job="selected" />
+
       <UTable
         v-model:sorting="sorting"
         v-model:row-selection="rowSelection"
@@ -361,8 +379,10 @@ const rangeLabel = computed(() => {
           tbody: '[&>tr]:last:[&>td]:border-b-0',
           th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
           td: 'border-b border-default py-2',
+          tr: 'cursor-pointer',
           separator: 'h-0'
         }"
+        @select="onRowSelect"
       >
         <template #empty>
           <div class="flex flex-col items-center gap-3 py-12 text-center">
