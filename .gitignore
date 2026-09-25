@@ -16,3 +16,4 @@ build/
 logs/
 *.sqlite-wal
 *.sqlite-shm
+node_modules/

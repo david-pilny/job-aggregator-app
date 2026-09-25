@@ -28,6 +28,14 @@ All optional; defaults are relative to the `ui/` folder.
 | `NUXT_DB_PATH`          | `../jobs.sqlite`   | The pipeline's SQLite file                            |
 | `NUXT_PIPELINE_CWD`     | `..`               | Working directory for "Run now" (where config.yaml lives) |
 | `NUXT_PIPELINE_COMMAND` | `uv run jobs run`  | Command spawned by "Run now" (`--dry-run` is appended when ticked) |
+| `NUXT_PIPELINE_SCHEDULE` | `0 7 * * *`       | Cron for the in-process schedule; `""` disables it. Read at startup, so restart after changing |
+
+## Scheduled runs
+
+`server/tasks/pipeline.ts` is a Nitro scheduled task. While the server is up it starts the
+pipeline on the cron above through the same runner as "Run now", so it never overlaps a
+manual run; the log appears on the runs page. In dev you can trigger it by hand with
+`GET http://localhost:3000/_nitro/tasks/pipeline`.
 
 ## Running alongside the pipeline
 

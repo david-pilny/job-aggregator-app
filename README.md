@@ -35,6 +35,22 @@ Then start the UI:
 cd ui && pnpm install && pnpm dev     # http://localhost:3000
 ```
 
+### One command for everything
+
+The UI server also schedules the pipeline: while `pnpm dev` (or a production
+`node .output/server/index.mjs`) is running, Nitro's cron runner starts `jobs run` at
+07:00 every day (`NUXT_PIPELINE_SCHEDULE`, see `ui/.env.example`), with the log on the
+runs page. So from the repo root:
+
+```bash
+pnpm dev            # UI + scheduled pipeline runs
+pnpm start          # one dry pipeline run first, then the UI
+pnpm pipeline       # just the pipeline
+pnpm test           # pytest + UI lint + typecheck
+```
+
+The OS scheduler below is only needed if the pipeline should run while the UI is closed.
+
 ## CLI
 
 | Command | What it does |
@@ -148,8 +164,9 @@ Actions or cloud runners are not the default.
 schtasks /create /sc daily /st 07:00 /tn jobagg /tr "cmd /c cd /d C:\path\to\job-aggretor && uv run jobs run >> logs\run.log 2>&1"
 ```
 
-The UI's "Run now" button is the manual alternative; both can use the database at the
-same time thanks to WAL mode.
+The UI's "Run now" button and its built-in schedule are the alternatives; everything can
+use the database at the same time thanks to WAL mode. Do not run both the OS scheduler and
+the UI schedule at the same time of day; a second run is harmless but wasteful.
 
 ## Development
 

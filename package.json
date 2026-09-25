@@ -1,0 +1,12 @@
+{
+  "name": "job-aggregator",
+  "private": true,
+  "description": "Convenience scripts for the whole project; the UI lives in ui/, the pipeline in src/jobagg/.",
+  "scripts": {
+    "dev": "pnpm --dir ui dev",
+    "pipeline": "uv run jobs run",
+    "pipeline:dry": "uv run jobs run --dry-run",
+    "start": "uv run jobs run --dry-run && pnpm --dir ui dev",
+    "test": "uv run pytest && pnpm --dir ui lint && pnpm --dir ui typecheck"
+  }
+}

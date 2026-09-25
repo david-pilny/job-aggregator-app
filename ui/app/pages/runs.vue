@@ -11,6 +11,7 @@ const UTooltip = resolveComponent('UTooltip')
 const { runs, runsStatus, runner, isRunning, start } = useRuns(20)
 
 const dryRun = ref(true)
+const { pipelineSchedule } = useRuntimeConfig().public
 
 // --- live log: stick to the bottom while lines arrive ---------------------------------
 
@@ -118,6 +119,16 @@ const columns = computed<TableColumn<Run>[]>(() => [
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <UTooltip :text="pipelineSchedule ? 'Runs automatically while the UI server is up (NUXT_PIPELINE_SCHEDULE)' : 'No schedule: set NUXT_PIPELINE_SCHEDULE'">
+            <UBadge
+              color="neutral"
+              variant="subtle"
+              size="sm"
+              icon="i-lucide-clock"
+            >
+              {{ pipelineSchedule ? `schedule ${pipelineSchedule}` : 'no schedule' }}
+            </UBadge>
+          </UTooltip>
           <UCheckbox
             v-model="dryRun"
             label="Dry run (no email)"
