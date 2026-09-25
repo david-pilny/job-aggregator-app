@@ -192,6 +192,12 @@ class Database:
         ).fetchall()
         return [self._row_to_job(r) for r in rows]
 
+    def jobs_by_company_norm(self, company_norm: str) -> list[Job]:
+        rows = self.conn.execute(
+            "SELECT * FROM jobs WHERE company_norm = ?", (company_norm,)
+        ).fetchall()
+        return [self._row_to_job(r) for r in rows]
+
     def job_count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0])
 

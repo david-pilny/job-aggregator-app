@@ -2,7 +2,7 @@ from datetime import date
 
 from jobagg.config import FiltersConfig
 from jobagg.filters import apply_filters
-from jobagg.models import Job
+from jobagg.models import Job, Language
 
 
 def _job(title: str, posted: date | None = None) -> Job:
@@ -22,6 +22,19 @@ def test_title_keywords_match_whole_words_only():
     kept, dropped = apply_filters(jobs, cfg, today=date(2026, 9, 25))
     assert [j.title for j in kept] == ["JavaScript Developer", "Senior Vue Developer"]
     assert dropped == {"title:junior": 1, "title:java": 1, "title:team lead": 1}
+
+
+def test_language_filter_keeps_unknown_by_default():
+    jobs = [_job("Vue Developer"), _job("Développeur Vue.js"), _job("Vue Entwickler")]
+    jobs[0].language, jobs[1].language, jobs[2].language = (
+        Language.EN, Language.OTHER, Language.DE)
+    cfg = FiltersConfig(languages=["cs", "en"])
+    kept, dropped = apply_filters(jobs, cfg, today=date(2026, 9, 25))
+    assert [j.title for j in kept] == ["Vue Developer", "Développeur Vue.js"]
+    assert dropped == {"language:de": 1}
+    cfg = FiltersConfig(languages=["cs", "en"], drop_unknown_language=True)
+    kept, _ = apply_filters(jobs, cfg, today=date(2026, 9, 25))
+    assert [j.title for j in kept] == ["Vue Developer"]
 
 
 def test_old_listings_are_dropped_unknown_dates_kept():

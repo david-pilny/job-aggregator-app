@@ -49,6 +49,8 @@ sources:
 
 filters:
   max_age_days: 14
+  languages: [cs, en, de]      # drop listings detected as another language
+  drop_unknown_language: false # "other" = no signal (short titles); keep them
   # Whole-word, case-insensitive match against the title. "java" does not match "javascript".
   exclude_title_keywords:
     - junior
@@ -66,6 +68,9 @@ filters:
     - "tech lead"
     - "head of"
     - manager
+    - "manažer"
+    - "manažerka"
+    - "vedoucí"
     - director
     - CTO
     - QA
@@ -73,6 +78,13 @@ filters:
     - "test engineer"
     - designer
     - "wordpress"
+    - "H/F"                    # French listings from the EU-wide remote search
+    - "Développeur"
+
+dedupe:
+  title_threshold: 85          # rapidfuzz token_set_ratio on normalized titles, same company
+  description_threshold: 90    # weaker title match still merges if descriptions match; 0 = off
+  title_slack: 20
 
 scoring:
   weights:                 # sum = 100
@@ -96,7 +108,11 @@ scoring:
     onsite: 0.1
   senior_keywords: [senior, medior, "mid-level", "mid level", experienced]
   lead_keywords: [lead, head, manager, principal, architect]
-  fresh_days: 3
+  junior_keywords: [junior, intern, trainee, graduate]
+  unknown_seniority_score: 0.6   # title says nothing about seniority
+  lead_score: 0.3                # lead/principal-only roles rank low but are not dropped
+  fresh_days: 3                  # full freshness points up to this age, then linear decay
+  relevance: none                # or "mypkg.mymodule:MyChecker" (see scoring.py) e.g. an LLM check
 
 tech_tags:
   vue: ["vue.js", vuejs, "vue 3", vue3, "vue 2", pinia, vuex, vuetify]

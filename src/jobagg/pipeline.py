@@ -8,9 +8,10 @@ from dataclasses import dataclass, field
 
 from jobagg.config import AppConfig
 from jobagg.db import Database
-from jobagg.dedupe import merge_exact
+from jobagg.dedupe import adopt_existing_ids, merge_batch
 from jobagg.filters import apply_filters
 from jobagg.models import Job, SearchQuery
+from jobagg.scoring import Scorer
 from jobagg.sources import build_sources
 
 log = logging.getLogger(__name__)
@@ -118,16 +119,22 @@ def run_pipeline(app: AppConfig, db: Database, *, dry_run: bool = False,
         log.info("filters dropped %d: %s", sum(dropped.values()),
                  ", ".join(f"{k}={v}" for k, v in dropped.most_common()))
 
-    unique = merge_exact(kept)
+    unique = adopt_existing_ids(merge_batch(kept, app.dedupe), db.jobs_by_company_norm, app.dedupe)
     summary.unique = len(unique)
     log.info("%d listings -> %d after filters -> %d unique", len(raw), len(kept), len(unique))
 
     result = db.upsert_jobs(unique)
     new_ids = set(result.new_ids)
-    summary.all_jobs = db.get_jobs(j.id for j in unique)
-    summary.new_jobs = [j for j in summary.all_jobs if j.id in new_ids]
     log.info("stored: %d new, %d already known (db total %d)",
              len(result.new_ids), len(result.updated_ids), db.job_count())
+
+    # Score the stored (merged) records; rescore everything active so freshness decays.
+    scorer = Scorer(app.scoring, max_age_days=app.filters.max_age_days)
+    active = scorer.score_all(db.active_jobs(app.storage.active_days))
+    db.update_scores(active)
+    by_id = {j.id: j for j in active}
+    summary.all_jobs = [by_id[j.id] for j in unique if j.id in by_id]
+    summary.new_jobs = [j for j in summary.all_jobs if j.id in new_ids]
 
     for stat in stats:
         db.record_source(run_id, stat.source, stat.fetched, stat.duration_s, stat.error)

@@ -54,6 +54,19 @@ class SourceSettings(BaseModel):
 class FiltersConfig(BaseModel):
     exclude_title_keywords: list[str] = Field(default_factory=list)
     max_age_days: int = 14
+    # Keep listings in these languages. "other" (no signal, e.g. a short English title)
+    # is kept unless drop_unknown_language is true.
+    languages: list[str] = Field(default_factory=lambda: ["cs", "en", "de"])
+    drop_unknown_language: bool = False
+
+
+class DedupeConfig(BaseModel):
+    # Same normalized company + title token_set_ratio >= this => duplicate.
+    title_threshold: int = 85
+    # Weaker title match (>= title_threshold - title_slack) still counts as a duplicate
+    # when both descriptions exist and are this similar. 0 disables the check.
+    description_threshold: int = 90
+    title_slack: int = 20
 
 
 class ScoringWeights(BaseModel):
@@ -76,7 +89,13 @@ class ScoringConfig(BaseModel):
     )
     senior_keywords: list[str] = Field(default_factory=lambda: ["senior", "medior", "mid"])
     lead_keywords: list[str] = Field(default_factory=lambda: ["lead", "head", "manager"])
+    junior_keywords: list[str] = Field(default_factory=lambda: ["junior", "intern", "trainee"])
+    unknown_seniority_score: float = 0.6
+    lead_score: float = 0.3
     fresh_days: int = 3
+    # Extension point: "none" (default) or a dotted path "package.module:Class" implementing
+    # jobagg.scoring.RelevanceChecker (e.g. an LLM-based relevance check).
+    relevance: str = "none"
 
 
 class EmailConfig(BaseModel):
@@ -104,6 +123,7 @@ class AppConfig(BaseModel):
     http: HttpConfig = Field(default_factory=HttpConfig)
     sources: dict[str, SourceSettings] = Field(default_factory=dict)
     filters: FiltersConfig = Field(default_factory=FiltersConfig)
+    dedupe: DedupeConfig = Field(default_factory=DedupeConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
     tech_tags: dict[str, list[str]] = Field(default_factory=dict)
     notify: NotifyConfig = Field(default_factory=NotifyConfig)

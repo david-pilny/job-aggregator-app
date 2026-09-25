@@ -39,6 +39,7 @@ def apply_filters(
     patterns = compile_keyword_patterns(cfg.exclude_title_keywords)
     kept: list[Job] = []
     dropped: Counter[str] = Counter()
+    allowed = set(cfg.languages)
     for job in jobs:
         keyword = excluded_by_title(job.title, patterns)
         if keyword:
@@ -46,6 +47,10 @@ def apply_filters(
             continue
         if job.posted_at is not None and job.posted_at < cutoff:
             dropped["too_old"] += 1
+            continue
+        lang = job.language.value
+        if allowed and lang not in allowed and (lang != "other" or cfg.drop_unknown_language):
+            dropped[f"language:{lang}"] += 1
             continue
         kept.append(job)
     return kept, dropped
