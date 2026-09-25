@@ -1,0 +1,142 @@
+# Personal job aggregator configuration.
+# Everything user-specific lives here; secrets (SMTP) live in .env (see .env.example).
+
+search:
+  # Every term is searched in every location. Adapters map these onto their own
+  # parameters (e.g. Czech boards ignore "European Union" locations).
+  terms:
+    - "Vue developer"
+    - "Nuxt developer"
+    - "Frontend developer"
+    - "TypeScript developer"
+  # Use "Czechia", not "Czech Republic": LinkedIn resolves the latter to the Dominican Republic.
+  locations:
+    - { name: "Prague, Czechia", remote: false }
+    - { name: "Czechia", remote: true }
+
+storage:
+  db_path: "jobs.sqlite"   # relative to this file
+  active_days: 21          # a job is "active" (shown in report.html) if seen within N days
+
+http:
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+  timeout_seconds: 20
+  delay_seconds: [2, 5]    # randomized pause between requests, per adapter
+  proxies: []              # optional, e.g. ["http://user:pass@host:port"]; empty = direct
+
+sources:
+  jobspy:
+    enabled: true
+    # google is supported but usually returns nothing from EU/residential IPs (Google serves a
+    # JavaScript-only page to the scraper). Add it back if it works from your network.
+    sites: [linkedin, indeed]
+    country_indeed: "czech republic"
+    results_wanted: 20             # per site and search; keep modest (LinkedIn rate-limits)
+    hours_old: null                # null = derived from filters.max_age_days
+    linkedin_fetch_description: false  # true = one extra request per LinkedIn job (slower)
+    delay_seconds: [3, 6]          # pause between site calls
+    extra_searches:                # in addition to search.terms x search.locations
+      - { term: "Vue.js developer", location: "European Union", remote: true, sites: [linkedin] }
+  jobs_cz:        { enabled: false }
+  prace_cz:       { enabled: false }
+  startupjobs:    { enabled: false }
+  cocuma:         { enabled: false }
+  jobstack:       { enabled: false }
+  wttj:           { enabled: false }
+  remotive:       { enabled: false }
+  arbeitnow:      { enabled: false }
+  weworkremotely: { enabled: false }
+
+filters:
+  max_age_days: 14
+  # Whole-word, case-insensitive match against the title. "java" does not match "javascript".
+  exclude_title_keywords:
+    - junior
+    - intern
+    - internship
+    - "stáž"
+    - "stážista"
+    - trainee
+    - "working student"
+    - "absolvent"
+    - "PHP developer"
+    - "PHP vývojář"
+    - java
+    - "team lead"
+    - "tech lead"
+    - "head of"
+    - manager
+    - director
+    - CTO
+    - QA
+    - tester
+    - "test engineer"
+    - designer
+    - "wordpress"
+
+scoring:
+  weights:                 # sum = 100
+    stack: 45
+    remote: 25
+    seniority: 15
+    salary: 5
+    freshness: 10
+  stack_tags:              # tag -> relative points; scaled so the best match = full stack weight
+    vue: 1.0
+    nuxt: 1.0
+    typescript: 0.7
+    javascript: 0.3
+    react: 0.3
+    node.js: 0.2
+  title_multiplier: 1.5    # a stack tag in the title counts this much more than in the body
+  remote_scores:
+    remote: 1.0
+    hybrid: 0.6
+    unknown: 0.4
+    onsite: 0.1
+  senior_keywords: [senior, medior, "mid-level", "mid level", experienced]
+  lead_keywords: [lead, head, manager, principal, architect]
+  fresh_days: 3
+
+tech_tags:
+  vue: ["vue.js", vuejs, "vue 3", vue3, "vue 2", pinia, vuex, vuetify]
+  nuxt: ["nuxt.js", nuxtjs, "nuxt 3", nuxt3]
+  typescript: [ts]
+  javascript: [js, ecmascript, es6, es2015]
+  react: ["react.js", reactjs, "react native"]
+  next.js: [nextjs]
+  angular: [angularjs]
+  svelte: [sveltekit]
+  node.js: [node, nodejs, express, nestjs, fastify]
+  tailwind: [tailwindcss]
+  graphql: [apollo]
+  rest: ["rest api", restful]
+  html: [html5]
+  css: [css3, scss, sass]
+  vite: [vitest]
+  jest: []
+  cypress: []
+  playwright: []
+  docker: []
+  kubernetes: [k8s]
+  aws: []
+  azure: []
+  gcp: ["google cloud"]
+  python: []
+  php: [laravel, symfony]
+  java: [spring, kotlin]
+  ".net": [c#, csharp, "asp.net"]
+  go: [golang]
+  figma: []
+
+notify:
+  email:
+    enabled: true
+    to: ""                  # your address; may also be set via EMAIL_TO in .env
+    subject_prefix: "[jobs]"
+    min_score: 40           # only include new jobs scoring at least this
+    max_items: 40
+
+report:
+  path: "report.html"
+  min_score: 0
